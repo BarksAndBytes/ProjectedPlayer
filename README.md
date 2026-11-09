@@ -41,7 +41,8 @@ If the receiver has an `auth_token` set, pass it before the command, for example
 `PROJECTED_TOKEN` environment variable.
 
 On Android, the export needs the **INTERNET** permission, and the receiver must be on the same
-Wi-Fi network as the sender.
+Wi-Fi network as the sender. `OS.get_system_dir(SYSTEM_DIR_MOVIES)` may return an empty path on
+Android. If it does, set `media_root` on the receiver explicitly, or every play request returns 403.
 
 ## Using the addon in your project
 

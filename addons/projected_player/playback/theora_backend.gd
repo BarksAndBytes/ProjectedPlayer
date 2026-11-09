@@ -28,6 +28,9 @@ func load(path: String) -> bool:
 
 
 func play() -> void:
+	if _player.stream == null:
+		push_warning("TheoraBackend: play() called before load().")
+		return
 	_player.play()
 	state = State.PLAYING
 

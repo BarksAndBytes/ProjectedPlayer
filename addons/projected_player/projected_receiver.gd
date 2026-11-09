@@ -170,7 +170,7 @@ func _parse_request(buf: PackedByteArray) -> Dictionary:
 		if parts.size() == 2:
 			headers[parts[0].strip_edges().to_lower()] = parts[1].strip_edges()
 
-	var content_length := int(headers.get("content-length", "0").to_int())
+	var content_length := maxi(0, int(headers.get("content-length", "0").to_int()))
 	var body_start := header_end + 4
 	if buf.size() < body_start + content_length:
 		return {}
@@ -236,10 +236,16 @@ func _cmd_play(body: Dictionary) -> String:
 	return _response(202, _status())
 
 
+## Compares normalized paths. Backslashes become slashes so Windows paths match,
+## and ".." segments are resolved before the prefix check.
 func _source_allowed(source: String) -> bool:
 	if media_root.is_empty():
 		return false
-	return source.simplify_path().begins_with(media_root.simplify_path())
+	var clean := source.replace("\\", "/").simplify_path()
+	var root := media_root.replace("\\", "/").simplify_path()
+	if not root.ends_with("/"):
+		root += "/"
+	return clean.begins_with(root)
 
 
 func _authorized(req: Dictionary) -> bool:

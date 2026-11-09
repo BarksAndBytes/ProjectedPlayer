@@ -82,7 +82,14 @@ def call(base: str, method: str, path: str, payload: "dict | None" = None,
         sys.exit(f"Receiver returned {error.code}: {detail}")
     except urllib.error.URLError as error:
         sys.exit(f"Could not reach receiver at {base}: {error.reason}")
-    return json.loads(body) if body else {}
+    except (socket.timeout, OSError) as error:
+        sys.exit(f"Receiver at {base} did not respond: {error}")
+    if not body:
+        return {}
+    try:
+        return json.loads(body)
+    except ValueError:
+        sys.exit(f"Receiver at {base} sent a non-JSON response")
 
 
 def main(argv=None) -> None:
