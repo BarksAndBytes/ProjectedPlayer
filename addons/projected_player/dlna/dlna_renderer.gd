@@ -105,7 +105,8 @@ func stop() -> void:
 		(client.peer as StreamPeerTCP).disconnect_from_host()
 	_clients.clear()
 	for job in _outbox:
-		(job.peer as StreamPeerTCP).disconnect_from_host()
+		if job.peer != null:
+			(job.peer as StreamPeerTCP).disconnect_from_host()
 	_outbox.clear()
 	_subs.clear()
 	_server.stop()
@@ -371,6 +372,7 @@ func _soap(short: String, req: Dictionary) -> PackedByteArray:
 	if args.has("InstanceID") and args.InstanceID.strip_edges() != "0":
 		return _fault(short, action, 718, "Invalid InstanceID")
 	var result: Variant = _run(short, action, args)
+	_event_timer = 0.0  # tell subscribers about any change at once
 	if result is Array:  # [error code, description]
 		return _fault(short, action, result[0], result[1])
 	var out := ""
@@ -536,6 +538,7 @@ func _start_playback() -> void:
 		_fail(screen.get_last_error())
 		return
 	_loaded = _ready_path
+	_event_timer = 0.0
 	screen.play()
 	_apply_volume()
 	_duration = screen.get_duration()
@@ -682,6 +685,7 @@ func _poll_conversion() -> void:
 
 
 func _fail(reason: String) -> void:
+	_event_timer = 0.0
 	_status = "ERROR_OCCURRED"
 	_error = reason
 	_want_play = false
@@ -827,16 +831,26 @@ func _notify(sid: String, sub: Dictionary, body: String) -> void:
 	sub.seq = 1 if sub.seq >= 4294967295 else sub.seq + 1
 	var data := head.to_utf8_buffer()
 	data.append_array(bytes)
-	var peer := StreamPeerTCP.new()
-	if peer.connect_to_host(host, port) != OK:
-		return
-	_outbox.append({peer = peer, data = data, started = Time.get_ticks_msec(), sent = false})
+	_outbox.append({sid = sid, host = host, port = port, data = data, peer = null, started = 0, sent = false})
 
 
+## Delivers queued events. Each subscriber's events go one at a time, in order, so a phone never
+## sees an older state after a newer one.
 func _pump_outbox() -> void:
 	var keep: Array = []
 	var now := Time.get_ticks_msec()
+	var busy := {}
 	for job in _outbox:
+		if job.peer == null:
+			if busy.has(job.sid):
+				keep.append(job)
+				continue
+			var fresh := StreamPeerTCP.new()
+			if fresh.connect_to_host(job.host, job.port) != OK:
+				continue
+			job.peer = fresh
+			job.started = now
+		busy[job.sid] = true
 		var peer: StreamPeerTCP = job.peer
 		peer.poll()
 		var status := peer.get_status()

@@ -507,7 +507,11 @@ class DlnaRendererTest(unittest.TestCase):
         self.assertEqual(self.state(r)["CurrentTransportState"], "PLAYING")
         self.assertEqual(soap(r["base"], "AVTransport", AVT, "Stop", InstanceID=0)[0], 200)
         self.assertEqual(self.state(r)["CurrentTransportState"], "STOPPED")
+        self.sink.wait_for(sid, lambda v: v.get("TransportState") == "STOPPED" and v.get("AVTransportURI") is None)
         gena(r["base"], "AVTransport", "UNSUBSCRIBE", {"SID": sid})
+        with self.sink.lock:  # one at a time, in order, none missing
+            seqs = [e[1] for e in self.sink.events if e[0] == sid]
+        self.assertEqual(seqs, list(range(len(seqs))))
 
     def test_seek_before_it_plays(self):
         self.need_ffmpeg()

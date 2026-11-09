@@ -72,6 +72,15 @@ class ThirdPartyClientTest(unittest.TestCase):
         r = self.harness.renderers["Board One"]
         url = self.files.url("clip.mp4")
 
+        async def eventually(dmr, test, what, seconds=5):
+            # What the client knows can come from events, which arrive a moment after a change.
+            for _ in range(seconds * 10):
+                if test():
+                    return
+                await asyncio.sleep(0.1)
+                await dmr.async_update()
+            raise AssertionError(f"{what} never became true")
+
         async def wait_state(dmr, want, seconds=60):
             for _ in range(seconds * 10):
                 await dmr.async_update()
@@ -97,19 +106,17 @@ class ThirdPartyClientTest(unittest.TestCase):
                 await wait_state(dmr, TransportState.PLAYING)
                 self.assertEqual(dmr.media_duration, 5)
                 self.assertEqual(dmr.current_track_uri, url)
-                self.assertTrue(dmr.can_pause and dmr.can_seek_rel_time)
+                await eventually(dmr, lambda: dmr.can_pause and dmr.can_seek_rel_time, "can pause and seek")
 
                 await dmr.async_pause()
                 await wait_state(dmr, TransportState.PAUSED_PLAYBACK)
                 await dmr.async_seek_rel_time(timedelta(seconds=3))
-                await dmr.async_update()
-                self.assertEqual(dmr.media_position, 3)
+                await eventually(dmr, lambda: dmr.media_position == 3, "position 3")
 
                 await dmr.async_set_volume_level(0.4)
                 await dmr.async_mute_volume(True)
-                await dmr.async_update()
-                self.assertAlmostEqual(dmr.volume_level, 0.4, places=2)
-                self.assertTrue(dmr.is_volume_muted)
+                await eventually(dmr, lambda: dmr.volume_level is not None and abs(dmr.volume_level - 0.4) < 0.01 and dmr.is_volume_muted,
+                                 "volume 0.4 and muted")
                 await dmr.async_mute_volume(False)
 
                 await dmr.async_play()
