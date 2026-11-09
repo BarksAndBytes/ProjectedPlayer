@@ -1,8 +1,10 @@
 extends Node3D
 
-## Standalone receiver: a screen floating in front of the camera that accepts
-## play commands from sender/projected_cast.py or any client following
-## docs/PROTOCOL.md. Playback is limited to .ogv files under the Movies folder.
+## Standalone receiver: a screen floating in front of the camera.
+## - Phone apps that cast to DLNA TVs list it as "Projected Player" (needs FFmpeg; see
+##   docs/DLNA.md).
+## - sender/projected_cast.py, or any client following docs/PROTOCOL.md, can play .ogv files
+##   under the Movies folder.
 
 
 func _ready() -> void:
@@ -26,3 +28,7 @@ func _ready() -> void:
 	receiver.screen = screen
 	receiver.media_root = OS.get_system_dir(OS.SYSTEM_DIR_MOVIES)
 	add_child(receiver)
+
+	var renderer := ProjectedDlnaRenderer.new()
+	renderer.screen = screen
+	add_child(renderer)

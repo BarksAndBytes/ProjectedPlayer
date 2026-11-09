@@ -95,6 +95,10 @@ func get_duration() -> float:
 	return _player.get_stream_length() if _player.stream != null else 0.0
 
 
+func set_volume(linear: float) -> void:
+	_player.volume = clampf(linear, 0.0, 1.0)
+
+
 func _on_finished() -> void:
 	state = State.IDLE
 	finished.emit()
