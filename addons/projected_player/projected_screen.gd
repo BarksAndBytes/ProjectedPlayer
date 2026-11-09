@@ -88,6 +88,11 @@ func get_duration() -> float:
 	return backend.get_duration()
 
 
+## Sound level, 0 (silent) to 1 (full).
+func set_volume(linear: float) -> void:
+	backend.set_volume(linear)
+
+
 func get_state_name() -> String:
 	match backend.state:
 		PlaybackBackend.State.PLAYING:

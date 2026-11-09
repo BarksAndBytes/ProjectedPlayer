@@ -59,3 +59,8 @@ func get_position() -> float:
 
 func get_duration() -> float:
 	return 0.0
+
+
+## Sound level, 0 (silent) to 1 (full). Backends without sound may ignore it.
+func set_volume(_linear: float) -> void:
+	pass
