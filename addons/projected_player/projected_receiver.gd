@@ -216,9 +216,13 @@ func _handle_request(req: Dictionary) -> String:
 			screen.stop()
 			return _response(200, _status())
 		"POST /seek":
+			var position = body.get("position")
+			if not (position is float or position is int) or float(position) < 0.0:
+				return _response(400, {"error": "'position' must be a number of seconds, 0 or more"})
 			if not screen.can_seek():
-				return _response(422, {"error": "seek is not supported by this backend"})
-			screen.seek(float(body.get("position", 0.0)))
+				return _response(422, {"error": "nothing to seek: play something first" if screen.get_state_name() == "idle"
+					else "seek is not supported by this backend"})
+			screen.seek(float(position))
 			return _response(200, _status())
 		_:
 			return _response(404, {"error": "unknown endpoint"})
@@ -231,7 +235,8 @@ func _cmd_play(body: Dictionary) -> String:
 	if not _source_allowed(source):
 		return _response(403, {"error": "source is outside media_root"})
 	if not screen.load_source(source):
-		return _response(422, {"error": "unsupported source for this backend"})
+		var reason := screen.get_last_error()
+		return _response(422, {"error": reason if reason != "" else "unsupported source for this backend"})
 	screen.play()
 	return _response(202, _status())
 
@@ -245,6 +250,8 @@ func _source_allowed(source: String) -> bool:
 	var root := media_root.replace("\\", "/").simplify_path()
 	if not root.ends_with("/"):
 		root += "/"
+	if OS.has_feature("windows"):  # Windows paths ignore case
+		return clean.to_lower().begins_with(root.to_lower())
 	return clean.begins_with(root)
 
 
@@ -264,7 +271,7 @@ func _status() -> Dictionary:
 		"name": receiver_name,
 		"state": screen.get_state_name(),
 		"source": screen.get_source(),
-		"position": screen.get_position(),
+		"position": screen.get_playback_position(),
 		"duration": screen.get_duration(),
 	}
 
@@ -278,7 +285,7 @@ func _json_body(text: String) -> Dictionary:
 
 func _response(code: int, data: Dictionary) -> String:
 	var body := "" if code == 204 else JSON.stringify(data)
-	return "HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n\r\n%s" % [
+	return "HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nConnection: close\r\n\r\n%s" % [
 		code,
 		REASONS.get(code, "OK"),
 		body.to_utf8_buffer().size(),

@@ -11,6 +11,8 @@ enum State { IDLE, PLAYING, PAUSED }
 
 var state: State = State.IDLE
 var source := ""
+## Why the last load() failed, for the receiver's error message. Empty after a good load.
+var last_error := ""
 
 
 ## Create child nodes under the given parent (a SubViewport).
@@ -18,7 +20,8 @@ func attach(_parent: Node) -> void:
 	pass
 
 
-## Prepare a source for playback. Returns false if this backend cannot play it.
+## Prepare a source for playback. Returns false if this backend cannot play it, with the
+## reason in last_error.
 func load(_source: String) -> bool:
 	return false
 
@@ -40,6 +43,8 @@ func stop() -> void:
 
 
 ## Whether seek() works. Receivers refuse seek requests when this is false.
+## Implementations should ignore pause() unless PLAYING and resume() unless PAUSED, so the
+## state never claims playback that isn't happening.
 func supports_seek() -> bool:
 	return false
 
