@@ -39,32 +39,39 @@ Status object:
 ```
 
 - `state` is one of `idle`, `playing`, `paused`.
-- `duration` is 0 until a backend reports it.
+- `duration` is 0 when the backend cannot report it. The built-in Theora backend always does.
 
 ### Errors
 
 | Code | Meaning                                                              |
 |------|----------------------------------------------------------------------|
 | 400  | Malformed request, or `source` missing                                |
+| 401  | Auth token missing or wrong (only when the receiver has a token set)  |
 | 403  | `source` is outside the receiver's `media_root`, or `media_root` is unset |
 | 404  | Unknown endpoint                                                     |
 | 408  | Request not completed within 5 seconds                                |
 | 413  | Request body over 64 KB                                              |
-| 422  | Backend cannot play this source (the built-in backend only plays `.ogv` files) |
+| 422  | Backend cannot play this source, or cannot seek (the built-in backend only plays `.ogv` files and does not seek) |
 
 Error bodies are `{"error": "message"}`.
 
 ## Sources
 
-Version 1 accepts local file paths only, and only inside the receiver's `media_root`.
+Version 1 accepts local file paths only, and only inside the receiver's `media_root`. Seek
+requests return 422 with the built-in backend.
 URLs are not supported until a backend that can stream them is added. Keep that in mind
 when you write senders.
 
-## Security
+## Authentication
 
-Version 1 has **no authentication**. Anyone on the same network can play or stop content.
-Run receivers only on networks you trust. Authentication (a shared token in a header) is
-planned for version 2.
+Set `auth_token` on the receiver to require `Authorization: Bearer <token>` on every request
+except `OPTIONS`. Senders pass it with `--token` or the `PROJECTED_TOKEN` environment variable.
+The beacon does not include the token.
+
+With `auth_token` empty, the API is **open**. Anyone on the same network can play or stop
+content, so run an open receiver only on a network you trust. The token is a shared secret
+sent in plain HTTP. It keeps out casual access on a home LAN, but it does not protect against
+anyone who can sniff the network. Use it with that limit in mind.
 
 ## Versioning
 

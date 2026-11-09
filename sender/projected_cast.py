@@ -12,6 +12,7 @@ Examples:
 
 import argparse
 import json
+import os
 import socket
 import sys
 import time
@@ -66,14 +67,13 @@ def base_url(args) -> str:
     sys.exit("Give a receiver with --to NAME or --host IP[:PORT].")
 
 
-def call(base: str, method: str, path: str, payload: "dict | None" = None) -> dict:
+def call(base: str, method: str, path: str, payload: "dict | None" = None,
+         token: "str | None" = None) -> dict:
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    request = urllib.request.Request(
-        base + path,
-        data=data,
-        method=method,
-        headers={"Content-Type": "application/json"},
-    )
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(base + path, data=data, method=method, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=5) as response:
             body = response.read()
@@ -89,6 +89,7 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Control Projected Player receivers.")
     parser.add_argument("--discover-seconds", type=float, default=3.0,
                         help="how long to listen for beacons when using --to")
+    parser.add_argument("--token", help="receiver auth token (or set PROJECTED_TOKEN)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("discover", help="list receivers on the network")
@@ -117,14 +118,15 @@ def main(argv=None) -> None:
         return
 
     base = base_url(args)
+    token = args.token or os.environ.get("PROJECTED_TOKEN")
     if args.command == "status":
-        result = call(base, "GET", "/status")
+        result = call(base, "GET", "/status", token=token)
     elif args.command in ("pause", "resume", "stop"):
-        result = call(base, "POST", f"/{args.command}")
+        result = call(base, "POST", f"/{args.command}", token=token)
     elif args.command == "play":
-        result = call(base, "POST", "/play", {"source": args.source})
+        result = call(base, "POST", "/play", {"source": args.source}, token=token)
     elif args.command == "seek":
-        result = call(base, "POST", "/seek", {"position": args.position})
+        result = call(base, "POST", "/seek", {"position": args.position}, token=token)
     print(json.dumps(result, indent=2))
 
 

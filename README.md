@@ -36,6 +36,10 @@ follow-up.
    python sender/projected_cast.py pause --to "Projected Player"
    ```
 
+If the receiver has an `auth_token` set, pass it before the command, for example
+`python sender/projected_cast.py --token "$TOKEN" pause --to "Projected Player"`, or set the
+`PROJECTED_TOKEN` environment variable.
+
 On Android, the export needs the **INTERNET** permission, and the receiver must be on the same
 Wi-Fi network as the sender.
 
@@ -53,8 +57,10 @@ To add a format, subclass `PlaybackBackend` and override `ProjectedScreen._creat
 
 Version 1 is early. It has not been run in the Godot editor yet, so expect small fixes.
 
-- **Playback:** the built-in backend plays `.ogv` (Theora) only. There is no duration reporting.
-- **Security:** no authentication. Use it on trusted networks only.
+- **Playback:** the built-in backend plays `.ogv` (Theora) only. It cannot seek, because Godot's
+  Theora playback ignores seek requests, and it reports duration as 0.
+- **Security:** set `auth_token` on the receiver and pass `--token` from senders. The token is
+  sent in plain HTTP, so it is not protection against someone sniffing your network.
 - **Discovery:** the UDP beacon uses broadcast, so it doesn't cross subnets or VLANs.
 
 See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the network protocol.

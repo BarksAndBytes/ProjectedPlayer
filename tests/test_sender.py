@@ -6,6 +6,7 @@ receiver, which needs the editor to run.
 """
 
 import json
+import os
 import socket
 import sys
 import threading
@@ -18,8 +19,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sender"))
 import projected_cast  # noqa: E402
 
 
+FAKE_TOKEN = "s3cret"
+
+
 class FakeReceiver(BaseHTTPRequestHandler):
     calls = []
+    last_auth = None
 
     def log_message(self, *args):
         pass
@@ -32,14 +37,24 @@ class FakeReceiver(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _authorized(self):
+        FakeReceiver.last_auth = self.headers.get("Authorization")
+        return FakeReceiver.last_auth == f"Bearer {FAKE_TOKEN}"
+
     def do_GET(self):
         FakeReceiver.calls.append(("GET", self.path, None))
+        if not self._authorized():
+            self._send(401, {"error": "missing or invalid token"})
+            return
         self._send(200, {"name": "Test", "state": "idle", "source": "", "position": 0, "duration": 0})
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length)) if length else None
         FakeReceiver.calls.append(("POST", self.path, body))
+        if not self._authorized():
+            self._send(401, {"error": "missing or invalid token"})
+            return
         if self.path == "/play" and not body.get("source"):
             self._send(400, {"error": "missing 'source'"})
         else:
@@ -60,6 +75,25 @@ class SenderTests(unittest.TestCase):
 
     def setUp(self):
         FakeReceiver.calls.clear()
+        os.environ["PROJECTED_TOKEN"] = FAKE_TOKEN
+
+    def tearDown(self):
+        os.environ.pop("PROJECTED_TOKEN", None)
+
+    def test_token_flag_sends_bearer_header(self):
+        with mock.patch("sys.stdout"):
+            projected_cast.main(["--token", FAKE_TOKEN, "status", "--host", self.base])
+        self.assertEqual(FakeReceiver.last_auth, f"Bearer {FAKE_TOKEN}")
+
+    def test_env_token_is_used(self):
+        with mock.patch("sys.stdout"):
+            projected_cast.main(["pause", "--host", self.base])
+        self.assertEqual(FakeReceiver.last_auth, f"Bearer {FAKE_TOKEN}")
+
+    def test_wrong_token_is_rejected(self):
+        with self.assertRaises(SystemExit) as ctx:
+            projected_cast.main(["--token", "wrong", "stop", "--host", self.base])
+        self.assertIn("401", str(ctx.exception))
 
     def test_play_posts_source(self):
         with mock.patch("sys.stdout"):
@@ -75,8 +109,9 @@ class SenderTests(unittest.TestCase):
         with mock.patch("sys.stdout"):
             projected_cast.main(["pause", "--host", self.base])
             projected_cast.main(["status", "--host", self.base])
-        self.assertEqual(FakeReceiver.calls[0], ("POST", "/pause", None))
-        self.assertEqual(FakeReceiver.calls[1], ("GET", "/status", None))
+        self.assertEqual(FakeReceiver.calls[0][:2], ("POST", "/pause"))
+        self.assertEqual(FakeReceiver.calls[1][:2], ("GET", "/status"))
+        self.assertEqual(FakeReceiver.last_auth, f"Bearer {FAKE_TOKEN}")
 
     def test_error_from_receiver_exits(self):
         with self.assertRaises(SystemExit) as ctx:

@@ -39,6 +39,11 @@ func stop() -> void:
 	pass
 
 
+## Whether seek() works. Receivers refuse seek requests when this is false.
+func supports_seek() -> bool:
+	return false
+
+
 func seek(_seconds: float) -> void:
 	pass
 

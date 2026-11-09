@@ -5,7 +5,8 @@ extends Node
 ## over HTTP. It broadcasts a UDP beacon for discovery and serves a small JSON
 ## API for play, pause, resume, stop, and seek. See docs/PROTOCOL.md.
 ##
-## Security: there is no authentication yet. Run it only on networks you trust.
+## Security: set auth_token to require "Authorization: Bearer <token>" on every
+## request except OPTIONS. With it empty, anyone on the network can control the receiver.
 
 const PROTOCOL_VERSION := 1
 const BEACON_INTERVAL := 2.0
@@ -16,6 +17,7 @@ const REASONS := {
 	202: "Accepted",
 	204: "No Content",
 	400: "Bad Request",
+	401: "Unauthorized",
 	403: "Forbidden",
 	404: "Not Found",
 	408: "Request Timeout",
@@ -30,6 +32,8 @@ const REASONS := {
 ## Local files may only be played from inside this absolute folder.
 ## Empty means local playback is refused.
 @export var media_root := ""
+## Shared secret for the HTTP API. Empty disables authentication.
+@export var auth_token := ""
 @export var auto_start := true
 
 var _server: TCPServer
@@ -160,12 +164,13 @@ func _parse_request(buf: PackedByteArray) -> Dictionary:
 	if first.size() < 2:
 		return {"bad": true}
 
-	var content_length := 0
+	var headers := {}
 	for i in range(1, lines.size()):
 		var parts := lines[i].split(":", true, 1)
-		if parts.size() == 2 and parts[0].strip_edges().to_lower() == "content-length":
-			content_length = parts[1].strip_edges().to_int()
+		if parts.size() == 2:
+			headers[parts[0].strip_edges().to_lower()] = parts[1].strip_edges()
 
+	var content_length := int(headers.get("content-length", "0").to_int())
 	var body_start := header_end + 4
 	if buf.size() < body_start + content_length:
 		return {}
@@ -173,6 +178,7 @@ func _parse_request(buf: PackedByteArray) -> Dictionary:
 	return {
 		"method": first[0],
 		"path": first[1].get_slice("?", 0),
+		"headers": headers,
 		"body": buf.slice(body_start, body_start + content_length).get_string_from_utf8(),
 	}
 
@@ -189,6 +195,8 @@ func _handle_request(req: Dictionary) -> String:
 		return _response(400, {"error": "malformed request"})
 	if req.method == "OPTIONS":
 		return _response(204, {})
+	if not _authorized(req):
+		return _response(401, {"error": "missing or invalid token"})
 
 	var body := _json_body(req.body)
 	match req.method + " " + req.path:
@@ -208,6 +216,8 @@ func _handle_request(req: Dictionary) -> String:
 			screen.stop()
 			return _response(200, _status())
 		"POST /seek":
+			if not screen.can_seek():
+				return _response(422, {"error": "seek is not supported by this backend"})
 			screen.seek(float(body.get("position", 0.0)))
 			return _response(200, _status())
 		_:
@@ -230,6 +240,13 @@ func _source_allowed(source: String) -> bool:
 	if media_root.is_empty():
 		return false
 	return source.simplify_path().begins_with(media_root.simplify_path())
+
+
+func _authorized(req: Dictionary) -> bool:
+	if auth_token.is_empty():
+		return true
+	var headers: Dictionary = req.get("headers", {})
+	return headers.get("authorization", "") == "Bearer " + auth_token
 
 
 func _info() -> Dictionary:

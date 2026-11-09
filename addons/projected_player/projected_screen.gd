@@ -62,6 +62,10 @@ func stop() -> void:
 	backend.stop()
 
 
+func can_seek() -> bool:
+	return backend.supports_seek()
+
+
 func seek(seconds: float) -> void:
 	backend.seek(seconds)
 

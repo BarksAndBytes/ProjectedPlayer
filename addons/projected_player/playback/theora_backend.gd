@@ -47,18 +47,24 @@ func stop() -> void:
 	state = State.IDLE
 
 
-func seek(seconds: float) -> void:
-	_player.stream_position = seconds
+## Godot's Theora playback ignores seeks (setting stream_position has no effect),
+## so this backend reports no seek support.
+func supports_seek() -> bool:
+	return false
+
+
+func seek(_seconds: float) -> void:
+	pass
 
 
 func get_position() -> float:
 	return _player.stream_position
 
 
-## VideoStreamPlayer does not expose the length, so this returns 0 until an
-## FFmpeg backend is added.
+## get_stream_length() always returns 0 for Theora. Duration only becomes
+## meaningful with an FFmpeg backend.
 func get_duration() -> float:
-	return 0.0
+	return _player.get_stream_length()
 
 
 func _on_finished() -> void:
