@@ -538,6 +538,53 @@ class DlnaRendererTest(unittest.TestCase):
             self.assertRegex(self.harness.text(), rf"SIGNAL Board Two cast_failed .*{re.escape(why)}", name)
 
 
+    # --- a screen that plays links itself (like FPS-CAD's video boards) ---------------------
+
+    def test_link_screen_gets_the_link_as_is(self):
+        r = self.harness.renderers["Board Three"]
+        url = "http://192.0.2.7:9000/phone/video.mp4?id=1&x=2"
+        self.cast(r, url, "Phone video")
+        self.assertEqual(self.state(r)["CurrentTransportState"], "STOPPED")
+        # A seek before it's ready is kept until it plays.
+        self.assertEqual(soap(r["base"], "AVTransport", AVT, "Seek", InstanceID=0, Unit="REL_TIME", Target="0:00:04")[0], 200)
+        self.assertEqual(soap(r["base"], "AVTransport", AVT, "Play", InstanceID=0, Speed=1)[0], 200)
+        self.assertEqual(self.state(r)["CurrentTransportState"], "TRANSITIONING")
+        self.assertEqual(soap(r["base"], "AVTransport", AVT, "Pause", InstanceID=0)[0], 200)  # harmless while loading
+        self.wait_state(r, "PLAYING", timeout=10)
+        pos = soap(r["base"], "AVTransport", AVT, "GetPositionInfo", InstanceID=0)[1]
+        self.assertEqual(pos["TrackURI"], url)
+        self.assertEqual(pos["TrackDuration"], "0:00:10")
+        self.assertIn(pos["RelTime"], ("0:00:04", "0:00:05"))
+        soap(r["base"], "AVTransport", AVT, "Pause", InstanceID=0)
+        self.wait_state(r, "PAUSED_PLAYBACK", timeout=5)
+        soap(r["base"], "AVTransport", AVT, "Play", InstanceID=0, Speed=1)
+        self.wait_state(r, "PLAYING", timeout=5)
+        soap(r["base"], "AVTransport", AVT, "Stop", InstanceID=0)
+        self.wait_state(r, "STOPPED", timeout=5)
+        # Play after Stop loads it again.
+        soap(r["base"], "AVTransport", AVT, "Play", InstanceID=0, Speed=1)
+        self.assertEqual(self.state(r)["CurrentTransportState"], "TRANSITIONING")
+        self.wait_state(r, "PLAYING", timeout=10)
+        soap(r["base"], "AVTransport", AVT, "Stop", InstanceID=0)
+
+    def test_link_screen_failure_reaches_the_phone(self):
+        r = self.harness.renderers["Board Three"]
+        self.cast(r, "http://192.0.2.7:9000/bad.mp4")
+        soap(r["base"], "AVTransport", AVT, "Play", InstanceID=0, Speed=1)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and self.state(r)["CurrentTransportStatus"] != "ERROR_OCCURRED":
+            time.sleep(0.1)
+        info = self.state(r)
+        self.assertEqual((info["CurrentTransportState"], info["CurrentTransportStatus"]), ("STOPPED", "ERROR_OCCURRED"))
+        self.assertIn("SIGNAL Board Three cast_failed the test screen refused it", self.harness.text())
+        # Playing a good link afterwards clears the error.
+        self.cast(r, "http://192.0.2.7:9000/good.mp4")
+        soap(r["base"], "AVTransport", AVT, "Play", InstanceID=0, Speed=1)
+        self.wait_state(r, "PLAYING", timeout=10)
+        self.assertEqual(self.state(r)["CurrentTransportStatus"], "OK")
+        soap(r["base"], "AVTransport", AVT, "Stop", InstanceID=0)
+
+
 @unittest.skipUnless(GODOT and Path(GODOT).exists(), "set GODOT to a Godot 4.4+ binary to run these")
 class DlnaPortTakenTest(unittest.TestCase):
     """When another program holds the SSDP port, the renderers announce themselves instead."""
@@ -556,7 +603,7 @@ class DlnaPortTakenTest(unittest.TestCase):
             self.assertIn("SSDP listening=false", harness.text())
             seen = set()
             deadline = time.monotonic() + 10
-            while time.monotonic() < deadline and len(seen) < 2:
+            while time.monotonic() < deadline and len(seen) < len(harness.renderers):
                 try:
                     data = listener.recv(4096).decode()
                 except socket.timeout:

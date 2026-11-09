@@ -93,6 +93,15 @@ func set_volume(linear: float) -> void:
 	backend.set_volume(linear)
 
 
+## True for a screen that fetches and plays links itself, such as one wrapping a player with its
+## own downloader. A ProjectedDlnaRenderer then hands it the phone's link as is (load_source(link)
+## and play()) instead of converting it first, and reads its progress from get_state_name(),
+## which may then also return "loading" (fetching or converting) and "error" (see
+## get_last_error()).
+func plays_links() -> bool:
+	return false
+
+
 func get_state_name() -> String:
 	match backend.state:
 		PlaybackBackend.State.PLAYING:

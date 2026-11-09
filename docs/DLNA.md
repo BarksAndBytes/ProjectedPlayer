@@ -62,6 +62,15 @@ converts, `cast_failed(reason)`. `get_transport_state()` gives `NO_MEDIA_PRESENT
 Several renderers can run at once, one per board: they share the SSDP port and each gets its own
 HTTP port.
 
+### Screens that play links themselves
+
+If your game already downloads and converts videos (with its own progress display or library),
+subclass `ProjectedScreen` and return `true` from `plays_links()`. The renderer then skips
+FFmpeg: it calls `load_source(link)` and `play()` with the phone's link as is, reports
+`TRANSITIONING` while `get_state_name()` is `"loading"`, and passes `"error"` (with
+`get_last_error()`) to the phone. Seeks sent while loading are applied once it plays.
+`tests/godot/link_screen.gd` is a minimal example.
+
 ### FFmpeg
 
 Casting needs the FFmpeg program built with libtheora (and libvorbis for sound). Without it,

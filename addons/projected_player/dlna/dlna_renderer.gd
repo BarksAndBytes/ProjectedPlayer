@@ -11,6 +11,9 @@ extends Node
 ##
 ## Several renderers can run at once (one per whiteboard, say): each gets its own port and name.
 ##
+## A screen whose plays_links() is true (one that downloads and converts links itself) gets the
+## link as is, with no FFmpeg here; its "loading" and "error" states are passed on to the phone.
+##
 ## Security: DLNA has no passwords. Anyone on the same network can cast to a running renderer,
 ## and the renderer will download whatever http(s) link it is sent. Start one only on networks
 ## you trust, and stop it when it isn't wanted.
@@ -138,6 +141,8 @@ func get_transport_state() -> String:
 		return "TRANSITIONING"
 	if _is_ours():
 		match screen.get_state_name():
+			"loading":
+				return "TRANSITIONING"
 			"playing":
 				return "PLAYING"
 			"paused":
@@ -180,6 +185,7 @@ func _process(delta: float) -> void:
 			alive.append(client)
 	_clients = alive
 	_poll_conversion()
+	_watch_link_screen()
 	_event_timer -= delta
 	if _event_timer <= 0.0:
 		_event_timer = EVENT_INTERVAL
@@ -401,11 +407,12 @@ func _run(short: String, action: String, args: Dictionary) -> Variant:
 		"AVTransport.Play":
 			return _play()
 		"AVTransport.Pause":
-			if get_transport_state() == "PLAYING":
+			var now := get_transport_state()
+			if now == "PLAYING":
 				screen.pause()
 			elif _want_play:
 				_want_play = false
-			elif get_transport_state() != "PAUSED_PLAYBACK":
+			elif now != "PAUSED_PLAYBACK" and now != "TRANSITIONING":
 				return [701, "Transition not available: nothing is playing"]
 			return {}
 		"AVTransport.Stop":
@@ -484,7 +491,7 @@ func _run(short: String, action: String, args: Dictionary) -> Variant:
 func _set_uri(uri: String, metadata: String) -> Variant:
 	if uri != "" and not (uri.begins_with("http://") or uri.begins_with("https://")):
 		return [716, "Resource not found: only http and https links can play"]
-	if uri != "" and _find_ffmpeg() == "":
+	if uri != "" and not _links() and _find_ffmpeg() == "":
 		return [714, "Can't convert videos: FFmpeg (with Theora) wasn't found on this device"]
 	if _is_ours() and screen.get_state_name() != "idle":
 		screen.stop()
@@ -504,6 +511,8 @@ func _set_uri(uri: String, metadata: String) -> Variant:
 	if uri == "":
 		return {}
 	cast_received.emit(uri, _title)
+	if _links():
+		return {}
 	var out := cache_path(uri)
 	if FileAccess.file_exists(out) and TheoraBackend.theora_problem(out) == "":
 		_ready_path = out
@@ -516,6 +525,23 @@ func _play() -> Variant:
 	if _uri == "":
 		return [701, "Transition not available: no video chosen"]
 	_status = "OK"
+	_error = ""
+	if _links():
+		if _is_ours():
+			match screen.get_state_name():
+				"paused":
+					screen.resume()
+					return {}
+				"playing", "loading":
+					return {}
+		if not screen.load_source(_uri):
+			_fail(screen.get_last_error())
+			return {}
+		_loaded = _uri
+		_event_timer = 0.0
+		screen.play()
+		_apply_volume()
+		return {}
 	if _ready_path == "":
 		_want_play = true
 		if _converter == null:
@@ -547,12 +573,33 @@ func _start_playback() -> void:
 	_pending_seek = -1.0
 
 
+## Whether the screen plays links itself (see ProjectedScreen.plays_links()).
+func _links() -> bool:
+	return screen.plays_links()
+
+
+## For a screen that plays links: passes its failures to the phone, and applies a seek that came
+## while it was loading.
+func _watch_link_screen() -> void:
+	if not _links() or not _is_ours():
+		return
+	match screen.get_state_name():
+		"error":
+			if _status == "OK":
+				_fail(screen.get_last_error())
+		"playing", "paused":
+			if _pending_seek >= 0.0 and screen.can_seek():
+				screen.seek(_pending_seek)
+				_pending_seek = -1.0
+				_event_timer = 0.0
+
+
 func _is_ours() -> bool:
 	return _loaded != "" and screen.get_source() == _loaded
 
 
 func _position() -> float:
-	if _is_ours() and screen.get_state_name() != "idle":
+	if _is_ours() and screen.get_state_name() in ["playing", "paused"]:
 		return screen.get_playback_position()
 	return maxf(_pending_seek, 0.0)
 

@@ -1,6 +1,7 @@
 extends SceneTree
 ## Runs DLNA renderers headless for tests/test_dlna.py: "Board One" and "Board Two", each on its
-## own screen and a free port, with SSDP on SSDP_PORT and converted videos in CACHE_DIR.
+## own screen and a free port, with SSDP on SSDP_PORT and converted videos in CACHE_DIR, and
+## "Board Three" on a screen that plays links itself (tests/godot/link_screen.gd).
 ## Prints "RENDERER <name> <port> <udn>" for each, then "READY". Signals are printed as
 ## "SIGNAL <name> <signal> <values>". Quits after RUN_SECONDS.
 
@@ -10,13 +11,17 @@ const Ssdp := preload("res://addons/projected_player/dlna/ssdp.gd")
 func _initialize() -> void:
 	Ssdp.port = int(OS.get_environment("SSDP_PORT"))
 	var renderers: Array = []
-	for board in ["Board One", "Board Two"]:
-		var mesh := MeshInstance3D.new()
-		mesh.mesh = QuadMesh.new()
-		root.add_child(mesh)
-		var screen := ProjectedScreen.new()
-		screen.target_mesh = mesh
-		screen.resolution = Vector2i(320, 180)
+	for board in ["Board One", "Board Two", "Board Three"]:
+		var screen: ProjectedScreen
+		if board == "Board Three":
+			screen = load("res://tests/godot/link_screen.gd").new()
+		else:
+			var mesh := MeshInstance3D.new()
+			mesh.mesh = QuadMesh.new()
+			root.add_child(mesh)
+			screen = ProjectedScreen.new()
+			screen.target_mesh = mesh
+			screen.resolution = Vector2i(320, 180)
 		root.add_child(screen)
 		var renderer := ProjectedDlnaRenderer.new()
 		renderer.screen = screen
