@@ -56,10 +56,11 @@ To add a format, subclass `PlaybackBackend` and override `ProjectedScreen._creat
 
 ## Status and known limits
 
-Version 1 is early. It has not been run in the Godot editor yet, so expect small fixes.
+Version 1 is early. The receiver is tested headless on Godot 4.7 (see Tests below).
 
-- **Playback:** the built-in backend plays `.ogv` (Theora) only. It cannot seek, because Godot's
-  Theora playback ignores seek requests, and it reports duration as 0.
+- **Playback:** the built-in backend plays `.ogv` (Ogg Theora) files only, with seeking and the
+  video's duration (Godot 4.4 and later). Files that aren't Theora videos are refused with the
+  reason, so the receiver never claims to play something it can't.
 - **Security:** set `auth_token` on the receiver and pass `--token` from senders. The token is
   sent in plain HTTP, so it is not protection against someone sniffing your network.
 - **Discovery:** the UDP beacon uses broadcast, so it doesn't cross subnets or VLANs.
@@ -69,10 +70,14 @@ See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the network protocol.
 ## Tests
 
 ```sh
-python -m unittest tests/test_sender.py
+python -m unittest tests/test_sender.py                                   # the sender, against a fake receiver
+GODOT=/path/to/godot python -m unittest tests/test_receiver.py           # the real receiver, headless
 ```
 
-These cover the Python sender. The GDScript receiver needs the Godot editor to test.
+`test_receiver.py` starts two receivers in headless Godot (one open, one with a token) and
+drives them over HTTP: playing, seeking, pausing, refused sources, `media_root`, CORS, tokens and
+the beacon. Without `GODOT` set it is skipped. GitHub Actions runs both on every push, with
+Godot 4.7.2, and fails if any GDScript file doesn't compile.
 
 ## License
 

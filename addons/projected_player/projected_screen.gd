@@ -74,8 +74,14 @@ func get_source() -> String:
 	return backend.source
 
 
-func get_position() -> float:
+## Seconds into the current video. (Not get_position(): that is Node3D's position in space.)
+func get_playback_position() -> float:
 	return backend.get_position()
+
+
+## Why the last load_source() failed, or "".
+func get_last_error() -> String:
+	return backend.last_error
 
 
 func get_duration() -> float:

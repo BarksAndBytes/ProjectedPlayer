@@ -39,26 +39,29 @@ Status object:
 ```
 
 - `state` is one of `idle`, `playing`, `paused`.
-- `duration` is 0 when the backend cannot report it. The built-in Theora backend always does.
+- `duration` is 0 when the backend cannot report it, or nothing is loaded.
+- `/pause` only pauses something playing and `/resume` only resumes something paused; otherwise
+  they leave the state as it is and return it.
 
 ### Errors
 
 | Code | Meaning                                                              |
 |------|----------------------------------------------------------------------|
-| 400  | Malformed request, or `source` missing                                |
+| 400  | Malformed request, `source` missing, or `position` not a number of 0 or more |
 | 401  | Auth token missing or wrong (only when the receiver has a token set)  |
 | 403  | `source` is outside the receiver's `media_root`, or `media_root` is unset |
 | 404  | Unknown endpoint                                                     |
 | 408  | Request not completed within 5 seconds                                |
 | 413  | Request body over 64 KB                                              |
-| 422  | Backend cannot play this source, or cannot seek (the built-in backend only plays `.ogv` files and does not seek) |
+| 422  | Backend cannot play this source (the message says why: no such file, not an Ogg file, no Theora video), or nothing is loaded to seek in |
 
 Error bodies are `{"error": "message"}`.
 
 ## Sources
 
-Version 1 accepts local file paths only, and only inside the receiver's `media_root`. Seek
-requests return 422 with the built-in backend.
+Version 1 accepts local file paths only, and only inside the receiver's `media_root` (compared
+after resolving `..`, with `\` read as `/`, and without case on Windows). The built-in backend
+plays `.ogv` (Ogg Theora) and seeks.
 URLs are not supported until a backend that can stream them is added. Keep that in mind
 when you write senders.
 
