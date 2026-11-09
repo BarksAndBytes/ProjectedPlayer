@@ -1,0 +1,9 @@
+; Engine configuration file.
+; Godot 4.x. Edit through the editor when possible.
+
+config_version=5
+
+[application]
+
+config/name="Projected Player"
+run/main_scene="res://examples/standalone/main.tscn"
